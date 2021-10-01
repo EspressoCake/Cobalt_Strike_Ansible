@@ -1,0 +1,534 @@
+---
+# tasks file for teamserver
+- name: Setting hostname of C2/mailserver.
+  ansible.builtin.hostname:
+    name: "mail"
+
+- name: Updating current APT cache.
+  apt:
+    update_cache: yes
+  tags:
+    - apt
+    - software
+
+- name: Installing prerequisite software.
+  apt:
+    name: "{{ item }}"
+    state: present
+    install_recommends: no
+  with_items:
+    - apache2
+    - certbot
+    - curl
+    - dovecot-common
+    - dovecot-imapd
+    - dovecot-lmtpd
+    - expect
+    - g++-multilib
+    - gnupg
+    - git
+    - iproute2
+    - mailutils
+    - nginx
+    - opendkim
+    - opendkim-tools
+    - opendmarc
+    - postfix
+    - postfix-policyd-spf-python
+    - postgrey
+    - openjdk-11-jdk
+    - openssl
+    - python3
+    - python3-certbot-apache
+    - python3-certbot-nginx
+    - samba
+    - sudo
+    - ufw
+    - unzip
+    - vim
+  notify:
+    - Stop ufw
+    - Start nginx
+  tags:
+    - apt
+    - software
+
+- name: Ensure DNS modules are installed for Python3 on remote teamserver.
+  pip:
+    name: dnspython
+    state: present
+  tags:
+    - pip
+    - python
+    - software
+
+- name: Ensuring underlying services are stopped to allow configuration changes.
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: stopped
+  with_items:
+    - apache2
+    - dovecot
+    - nginx
+    - opendkim
+    - opendmarc
+  tags:
+    - software
+
+- name: Nuking original NGINX configuration file.
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Adding requisite Terraform GPG key.
+  ansible.builtin.apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+    state: present
+  tags:
+    - software
+    - terraform
+
+- name: Getting current architecture.
+  shell: dpkg --print-architecture
+  register: deb_architecture
+  tags:
+    - registered_vars
+
+- name: Get current lsb_release
+  shell: lsb_release -cs
+  register: lsb_release
+  tags:
+    - registered_vars
+
+- name: Adding Terraform source configuration using previous variables.
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ deb_architecture.stdout }}] https://apt.releases.hashicorp.com {{ lsb_release.stdout }} main"
+    state: present
+  tags:
+    - software
+    - terraform
+
+- name: Installing Terraform.
+  ansible.builtin.apt:
+    name: terraform
+    state: latest
+  tags:
+    - software
+    - terraform
+
+- name: Ensure that the Terraform directory is absent, we will populate ourselves.
+  ansible.builtin.file:
+    path: /root/terraform/
+    state: absent
+
+- name: Creating a directory for our Terraform templated configuration to live.
+  ansible.builtin.file:
+    path: /root/terraform
+    state: directory
+  tags:
+    - software
+    - terraform
+
+- name: Creating a new Cobalt Strike directory if it doesn't already exist.
+  ansible.builtin.file:
+    path: /root/cobaltstrike
+    state: directory
+  tags:
+    - cobaltstrike
+    - software
+
+- name: Transfering local copy of tar.gz of Cobalt Strike to host, if not present.
+  ansible.builtin.unarchive:
+    src: cobalt_strike/cobaltstrike.zip
+    dest: /root/
+  tags:
+    - cobaltstrike
+    - software
+
+- name: Copying contents of license key.
+  ansible.builtin.copy:
+    dest: /root/.cobaltstrike.license
+    content: "{{ cs_license }}"
+  when: cs_license
+  tags:
+    - cobaltstrike
+    - software
+
+- name: Updating teamserver and client.
+  ansible.builtin.shell: "./update"
+  args:
+    executable: /bin/bash
+    chdir: /root/cobaltstrike
+  when: cs_license
+  tags:
+    - cobaltstrike
+    - software
+
+- name: Making the directory for our profiles and content to live.
+  ansible.builtin.file:
+    path: /root/cobaltstrike/profile
+    state: directory
+  tags:
+    - cobaltstrike
+    - software
+
+- name: Creating Cobalt Strike profile with Ingressive configuration.
+  ansible.builtin.template:
+    src: cobaltstrike/ingressive_profile.j2
+    dest: /root/cobaltstrike/profile/ingressive.profile
+  when: cs_license and provided_domain and provided_password
+  tags:
+    - cobaltstrike
+    - software
+
+- name: Creating a temporary DKIM parser that gives JSON output for Terraform.
+  copy:
+    dest: /usr/bin/fetchdkim
+    owner: root
+    group: root
+    mode: u=rwx
+    content: |
+      #!/bin/bash
+      ###################################
+      # Author:   Justin Lucas          #
+      # Email:    jlucas@ingressive.com #
+      # Date:     July 20, 2021         #
+      ###################################
+      function get_dns_entries() {
+          domain=$(ls /etc/opendkim/keys/ | head -1)
+          #dkimrecord=$(cut -d '"' -f 2 "/etc/opendkim/keys/${domain}/mail.txt" | tr -d "[:space:]")
+          dkimrecord="1"
+          JSON_MOCK='{"dkim":"%s"}\n'
+          printf "$JSON_MOCK" "$dkimrecord"
+      }
+
+      get_dns_entries
+
+- name: Create file from Jinja2 template.
+  ansible.builtin.template:
+    src: terraform/main.tf.j2
+    dest: /root/terraform/main.tf
+  tags:
+    - cobaltstrike
+    - software
+
+- name: Grabbing external IP address associated with our teamserver.
+  community.general.ipify_facts:
+    timeout: 20
+  register: externalip
+  tags:
+    - dns
+    - terraform
+
+- name: Invoke Terraform to create DNS records.
+  community.general.terraform:
+    project_path: /root/terraform
+    state: present
+    force_init: true
+    overwrite_init: true
+  when: (lookup('community.general.dig', '{{ provided_domain }}.') != externalip.ansible_facts.ipify_public_ip) and (lookup('community.general.dig', 'www.{{ provided_domain }}') != externalip.ansible_facts.ipify_public_ip)
+  tags:
+    - dns
+    - terraform
+
+- name: Awaiting changes in external DNS for www and @ A records.
+  pause:
+    prompt: "Awaiting first two DNS records to populate, please be patient."
+    seconds: 30
+  when: (lookup('community.general.dig', '{{ provided_domain }}.') != externalip.ansible_facts.ipify_public_ip) and (lookup('community.general.dig', 'www.{{ provided_domain }}') != externalip.ansible_facts.ipify_public_ip)
+  until: (lookup('community.general.dig', '{{ provided_domain }}.') == externalip.ansible_facts.ipify_public_ip) and (lookup('community.general.dig', 'www.{{ provided_domain }}') == externalip.ansible_facts.ipify_public_ip)
+  delay: 10
+  retries: 100
+  tags:
+    - dns
+    - terraform
+
+- name: Retrieving DNS records, to ensure they are as expected.
+  ansible.builtin.debug:
+    msg: "Record {{ item.0 }}: {{ item.1 }}"
+  with_nested:
+    - ["@", "{{ lookup('community.general.dig', '{{ provided_domain }}.') }}"]
+    - [
+        "www",
+        "{{ lookup('community.general.dig', 'www.{{ provided_domain }}.') }}",
+      ]
+  tags:
+    - dns
+    - terraform
+
+- name: Ensuring the /etc/letsencrypt directory exists.
+  ansible.builtin.file:
+    path: /etc/letsencrypt
+    state: directory
+  tags:
+    - letsencrypt
+
+- name: Creating required directories in /etc/letsencrypt.
+  ansible.builtin.file:
+    path: "/etc/letsencrypt/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: u=rwx,g=x,o=x
+  with_items:
+    - account
+    - certs
+    - csrs
+    - keys
+  tags:
+    - letsencrypt
+
+- name: Configuring default NGINX file via template.
+  ansible.builtin.template:
+    src: nginx/domain.conf.j2
+    dest: /etc/nginx/conf.d/www.{{provided_domain}}.conf
+  tags:
+    - letsencrypt
+    - nginx
+
+- name: Determining whether we already have SSL certificates from a prior run.
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ provided_domain }}/fullchain.pem"
+  register: prior_fullchain_present
+
+- name: Calling Python3 to install our certificate(s) to Nginx.
+  ansible.builtin.command: "certbot --nginx -d {{ provided_domain }} -d www.{{ provided_domain }} -m certs@{{ provided_domain }} --agree-tos --noninteractive"
+  when: not prior_fullchain_present.stat.exists
+  tags:
+    - letsencrypt
+
+- name: Set crontab for autorenewal.
+  ansible.builtin.cron:
+    name: letsencrypt_renew
+    special_time: monthly
+    job: "/usr/bin/certbot renew --quiet"
+  tags:
+    - letsencrypt
+
+- name: Creating a replacement global DKIM parser that gives JSON output for Terraform.
+  copy:
+    dest: /usr/bin/fetchdkim
+    owner: root
+    group: root
+    mode: u=rwx
+    content: |
+      #!/bin/bash
+      ###################################
+      # Author:   Justin Lucas          #
+      # Email:    jlucas@ingressive.com #
+      # Date:     July 20, 2021         #
+      ###################################
+      function get_dns_entries() {
+          domain=$(ls /etc/opendkim/keys/ | head -1)
+          dkimrecord=$(cut -d '"' -f 2 "/etc/opendkim/keys/${domain}/mail.txt" | tr -d "[:space:]")
+          JSON_MOCK='{"dkim":"%s"}\n'
+          printf "$JSON_MOCK" "$dkimrecord"
+      }
+
+      get_dns_entries
+
+- name: Creating a mail accounts with nologin shell.
+  user:
+    name: "{{ item }}"
+    password: "{{ provided_password | password_hash('sha512') }}"
+    comment: "{{ item }}"
+    shell: /usr/sbin/nologin
+  with_items:
+    - mailarchive
+    - mailuser
+  tags:
+    - mail
+    - baseline
+
+- name: Creating Postfix configuration from template.
+  ansible.builtin.template:
+    src: postfix/conf.j2
+    dest: /etc/postfix/main.cf
+  tags:
+    - mail
+
+- name: Creating Postfix esmtp_access configuration from template.
+  ansible.builtin.template:
+    src: postfix/esmtp_access.j2
+    dest: /etc/postfix/esmtp_access
+  tags:
+    - mail
+
+- name: Creating Postfix master.cf configuration from template.
+  ansible.builtin.template:
+    src: postfix/master.cf.j2
+    dest: /etc/postfix/master.cf
+  tags:
+    - mail
+
+- name: Create necessary local directories for OpenDKIM.
+  ansible.builtin.file:
+    dest: "/etc/opendkim/{{ item }}"
+    state: directory
+  with_items:
+    - keys
+    - "keys/{{ provided_domain }}"
+    - debug
+  tags:
+    - mail
+
+- name: Creating primary OpenDKIM configuration file.
+  ansible.builtin.template:
+    src: dkim/opendkim.conf.j2
+    dest: /etc/opendkim.conf
+  tags:
+    - mail
+
+- name: Ensuring socket configuration is present in /etc/default/opendkim.
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    create: yes
+    state: present
+    line: "127.0.0.1  www.{{ provided_domain }} {{ provided_domain }} mail.{{ provided_domain }}"
+  tags:
+    - mail
+
+- name: Creating primary OpenDKIM trusted-hosts configuration file.
+  ansible.builtin.template:
+    src: dkim/trusted_hosts.conf.j2
+    dest: /etc/opendkim/TrustedHosts
+  tags:
+    - mail
+
+- name: Creating DKIM key for later use.
+  ansible.builtin.shell: "opendkim-genkey -b 1024 -s mail -d '{{ provided_domain }}'"
+  args:
+    chdir: "/etc/opendkim/keys/{{ provided_domain }}/"
+    executable: /bin/bash
+  tags:
+    - mail
+
+- name: Ensuring socket configuration is present in /etc/default/opendkim.
+  ansible.builtin.lineinfile:
+    path: /etc/default/opendkim
+    create: yes
+    state: present
+    line: SOCKET="inet:12301"
+  tags:
+    - mail
+
+- name: Changing ownership of /etc/opendkim to generated OpenDKIM user.
+  ansible.builtin.file:
+    path: /etc/opendkim
+    recurse: yes
+    owner: opendkim
+    group: opendkim
+  tags:
+    - mail
+
+- name: Creating OpenDMARC configuration from template.
+  ansible.builtin.template:
+    src: opendmarc/opendmarc.conf.j2
+    dest: /etc/opendmarc.conf
+
+- name: Creating directory for OpenDMARC configuration(s) to exist.
+  ansible.builtin.file:
+    path: /etc/opendmarc
+    state: directory
+
+- name: Ensuring localhost is within the ignorehosts file.
+  ansible.builtin.lineinfile:
+    create: yes
+    dest: /etc/default/opendmarc
+    line: SOCKET="inet:54321"
+    state: present
+
+- name: Ensuring that the ignore.hosts file exists.
+  ansible.builtin.file:
+    path: /etc/opendmarc/ignore.hosts
+    state: file
+
+- name: Ensuring that localhost is excluded from the ignore.hosts file for OpenDMARC.
+  ansible.builtin.lineinfile:
+    path: /etc/opendmarc/ignore.hosts
+    state: present
+    line: "localhost"
+
+- name: Ensuring ownership of the OpenDMARC directory is accurate.
+  ansible.builtin.file:
+    path: /etc/opendmarc
+    state: directory
+    owner: opendmarc
+    group: opendmarc
+    recurse: yes
+
+- name: Ensuring the default Dovecot directory exists.
+  ansible.builtin.file:
+    path: /etc/dovecot
+    state: directory
+
+- name: Configuring default Dovecot configuration from template.
+  ansible.builtin.template:
+    src: dovecot/dovecot.conf.j2
+    dest: /etc/dovecot/dovecot.conf
+
+- name: Ensuring pam.d, logrotate.d directories exist.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - /etc/logrotate.d
+    - /etc/pam.d
+
+- name: Creating templated imap file(s).
+  ansible.builtin.template:
+    src: imap/imap.j2
+    dest: /etc/pam.d/imap
+
+- name: Creating templated dovecot file(s).
+  ansible.builtin.template:
+    src: dovecot/logrotate.dovecot.j2
+    dest: /etc/logrotate.d/dovecot
+
+- name: Creating final DNS records for domain key(s) from template.
+  ansible.builtin.template:
+    src: terraform/main.tf.post.j2
+    dest: /root/terraform/main.tf
+  tags:
+    - none
+
+- name: Applying final DNS records post-template generation.
+  community.general.terraform:
+    project_path: /root/terraform
+    state: present
+    force_init: true
+  tags:
+    - none
+
+- name: Determining whether we need to generate a PKCS#12 file.
+  ansible.builtin.stat:
+    path: "/root/cobaltstrike/profile/{{ provided_domain }}.pkcs12"
+  register: java_key_present
+  tags:
+    - keystore
+
+- name: Generating PKCS#12 file.
+  community.crypto.openssl_pkcs12:
+    action: export
+    passphrase: "{{ provided_password }}"
+    path: /root/cobaltstrike/profile/{{ provided_domain }}.pkcs12
+    friendly_name: "{{ provided_domain }}"
+    privatekey_path: "/etc/letsencrypt/live/{{ provided_domain }}/privkey.pem"
+    certificate_path: "/etc/letsencrypt/live/{{ provided_domain }}/fullchain.pem"
+    state: present
+  when: not java_key_present.stat.exists
+  tags:
+    - crypto
+
+- name: Importing SSL certificate to Java keystore.
+  community.general.java_cert:
+    pkcs12_path: "/root/cobaltstrike/profile/{{ provided_domain }}.pkcs12"
+    pkcs12_alias: "{{ provided_domain }}"
+    pkcs12_password: "{{ provided_password }}"
+    keystore_create: yes
+    keystore_path: "/root/cobaltstrike/profile/{{ provided_domain }}.pkcs12"
+    keystore_pass: "{{ provided_password }}"
+    cert_alias: "{{ provided_domain }}"
+    state: present
+  tags:
+    - crypto

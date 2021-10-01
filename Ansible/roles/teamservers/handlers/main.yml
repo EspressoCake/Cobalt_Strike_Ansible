@@ -1,0 +1,141 @@
+---
+# handlers file for teamserver
+- name: Start ufw
+  ansible.builtin.service:
+    name: ufw
+    state: started
+
+- name: Stop ufw
+  ansible.builtin.service:
+    name: ufw
+    state: stopped
+
+- name: Restart ufw
+  ansible.builtin.service:
+    name: ufw
+    state: restarted
+
+- name: Reload ufw
+  ansible.builtin.service:
+    name: ufw
+    state: reloaded
+
+- name: Start apache2
+  ansible.builtin.service:
+    name: apache2
+    state: started
+
+- name: Stop apache2
+  ansible.builtin.service:
+    name: apache2
+    state: stopped
+
+- name: Restart apache2
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+
+- name: Reload apache2
+  ansible.builtin.service:
+    name: apache2
+    state: reloaded
+
+- name: Start postfix
+  ansible.builtin.service:
+    name: postfix
+    state: started
+
+- name: Stop postfix
+  ansible.builtin.service:
+    name: postfix
+    state: stopped
+
+- name: Restart postfix
+  ansible.builtin.service:
+    name: postfix
+    state: restarted
+
+- name: Reload postfix
+  ansible.builtin.service:
+    name: postfix
+    state: reloaded
+
+- name: Start opendkim
+  ansible.builtin.service:
+    name: opendkim
+    state: started
+
+- name: Stop opendkim
+  ansible.builtin.service:
+    name: opendkim
+    state: stopped
+
+- name: Restart opendkim
+  ansible.builtin.service:
+    name: opendkim
+    state: restarted
+
+- name: Reload opendkim
+  ansible.builtin.service:
+    name: opendkim
+    state: reloaded
+
+- name: Start opendmarc
+  ansible.builtin.service:
+    name: opendmarc
+    state: started
+
+- name: Stop opendmarc
+  ansible.builtin.service:
+    name: opendmarc
+    state: stopped
+
+- name: Restart opendmarc
+  ansible.builtin.service:
+    name: opendmarc
+    state: restarted
+
+- name: Reload opendmarc
+  ansible.builtin.service:
+    name: opendmarc
+    state: reloaded
+
+- name: Start dovecot
+  ansible.builtin.service:
+    name: dovecot
+    state: started
+
+- name: Stop dovecot
+  ansible.builtin.service:
+    name: dovecot
+    state: stopped
+
+- name: Restart dovecot
+  ansible.builtin.service:
+    name: dovecot
+    state: restarted
+
+- name: Reload dovecot
+  ansible.builtin.service:
+    name: dovecot
+    state: reloaded
+
+- name: Start nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+
+- name: Stop nginx
+  ansible.builtin.service:
+    name: nginx
+    state: stopped
+
+- name: Restart nginx
+  ansible.builtin.service:
+    name: nginx
+    state: restarted
+
+- name: Reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded

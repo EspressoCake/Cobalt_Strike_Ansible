@@ -1,0 +1,17 @@
+Domain                      *
+AutoRestart                 Yes
+AutoRestartRate             10/1h
+Umask                       0002
+Syslog                      Yes
+SyslogSuccess               Yes
+LogWhy                      Yes
+Canonicalization            relaxed/simple
+ExternalIgnoreList          refile:/etc/opendkim/TrustedHosts
+InternalHosts               refile:/etc/opendkim/TrustedHosts
+KeyFile                     /etc/opendkim/keys/{{ provided_domain }}/mail.private
+Selector                    mail
+Mode                        sv
+PidFile                     /var/run/opendkim/opendkim.pid
+SignatureAlgorithm          rsa-sha256
+UserID                      opendkim:opendkim
+Socket                      inet:12301@localhost

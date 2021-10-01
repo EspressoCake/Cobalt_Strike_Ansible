@@ -1,0 +1,16 @@
+---
+# handlers file for teamshare
+- name: Start Samba
+  ansible.builtin.service:
+    name: smbd
+    state: started
+
+- name: Stop Samba
+  ansible.builtin.service:
+    name: smbd
+    state: stopped
+
+- name: Reload Samba
+  ansible.builtin.service:
+    name: smbd
+    state: reloaded

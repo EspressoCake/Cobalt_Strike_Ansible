@@ -1,0 +1,116 @@
+---
+- name: Updating the current APT cache.
+  apt:
+    update_cache: yes
+
+- name: Installing prerequisite software.
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - git
+    - samba
+    - sudo
+    - ufw
+
+- name: Allowing SMB through the firewall.
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+  loop:
+    - "53"
+    - "137"
+    - "138"
+    - "139"
+    - "445"
+
+- name: Allow SSH access from anywhere.
+  ufw:
+    rule: allow
+    port: 22
+    proto: tcp
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+    policy: deny
+
+- name: Ensuring the asmtuser exists.
+  ansible.builtin.user:
+    name: "{{ share_user }}"
+    comment: Default account used for share.
+    password: "{{ share_pass | password_hash('sha512') }}"
+    shell: /bin/bash
+    state: present
+
+- name: Ensuring group for created user exists.
+  group:
+    name: "{{ share_user }}"
+    state: present
+
+- name: Ensuring common child directories exist.
+  ansible.builtin.file:
+    path: "/home/{{ share_user }}/share/{{ item }}"
+    state: directory
+    owner: "{{ share_user }}"
+    group: "{{ share_user }}"
+    recurse: yes
+  loop:
+    - Archive
+    - Data
+    - Documentation
+    - Working
+
+- name: Ensuring common data directories exist.
+  ansible.builtin.file:
+    path: "/home/{{ share_user }}/share/Data/{{ item }}"
+    state: directory
+    owner: "{{ share_user }}"
+    group: "{{ share_user }}"
+  loop:
+    - Internal
+    - External
+
+- name: Creating ancilliary directories.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ share_user }}"
+    group: "{{ share_user }}"
+  loop:
+    - "/home/{{ share_user }}/share/Archive/Internal"
+    - "/home/{{ share_user }}/share/Archive/External"
+    - "/home/{{ share_user }}/share/Archive/Internal/Cobalt_Strike"
+    - "/home/{{ share_user }}/share/Archive/External/Cobalt_Strike"
+    - "/home/{{ share_user }}/share/Archive/Internal/Operator_Logs"
+    - "/home/{{ share_user }}/share/Archive/External/Operator_Logs"
+    - "/home/{{ share_user }}/share/Data/Network Mapping"
+    - "/home/{{ share_user }}/share/Data/Network Mapping/Internal"
+    - "/home/{{ share_user }}/share/Data/Network Mapping/Internal/Nmap"
+    - "/home/{{ share_user }}/share/Data/Network Mapping/Internal/Nmap/Full"
+    - "/home/{{ share_user }}/share/Data/Network Mapping/Internal/Nmap/Discovery"
+    - "/home/{{ share_user }}/share/Data/Network Mapping/External/Nmap"
+    - "/home/{{ share_user }}/share/Data/Network Mapping/External/Nmap/Discovery"
+    - "/home/{{ share_user }}/share/Data/Network Mapping/External/Nmap/Full"
+    - "/home/{{ share_user }}/share/Data/Vulnerability Scanning"
+    - "/home/{{ share_user }}/share/Data/Vulnerability Scanning/Internal"
+    - "/home/{{ share_user }}/share/Data/Vulnerability Scanning/External"
+    - "/home/{{ share_user }}/share/Data/Vulnerability Scanning/Internal/Nessus"
+    - "/home/{{ share_user }}/share/Data/Vulnerability Scanning/Internal/Nikto"
+    - "/home/{{ share_user }}/share/Data/Vulnerability Scanning/External/Nessus"
+    - "/home/{{ share_user }}/share/Data/Vulnerability Scanning/External/Nikto"
+    - "/home/{{ share_user }}/share/Phishing/"
+    - "/home/{{ share_user }}/share/Phishing/Templates"
+    - "/home/{{ share_user }}/share/Phishing/Payloads"
+    - "/home/{{ share_user }}/share/Phishing/Targets"
+
+- name: Copying over templated file for SMB configuration.
+  template:
+    src: samba/smb.conf.j2
+    dest: /etc/samba/smb.conf
+
+- name: Creating password for SMB share.
+  shell: (echo '{{ share_pass }}'; echo '{{ share_pass }}') | smbpasswd -a {{ share_user }}
+  notify:
+    - Start Samba
+    - Reload Samba

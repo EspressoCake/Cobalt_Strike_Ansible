@@ -1,0 +1,10 @@
+# dovecot SIGUSR1: Re-opens the log files.
+/var/log/dovecot*.log {
+  missingok
+  notifempty
+  delaycompress
+  sharedscripts
+  postrotate
+    /bin/kill -USR1 `cat /var/run/dovecot/master.pid 2>/dev/null` 2> /dev/null || true
+  endscript
+}

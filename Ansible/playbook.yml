@@ -1,0 +1,21 @@
+---
+- name: Configure your operation's teamserver.
+  hosts: teamservers
+  gather_facts: true
+  roles:
+    - role: teamservers
+  vars:
+    cs_license: ""
+    provided_domain: ""
+    provided_password: ""
+    namecheap_user: ""
+    namecheapapi_key: ""
+
+- name: Configure teamshare(s).
+  hosts: teamshares
+  gather_facts: yes
+  roles:
+    - role: teamshares
+  vars:
+    share_user: ""
+    share_pass: ""

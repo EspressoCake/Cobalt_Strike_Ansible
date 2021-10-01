@@ -1,0 +1,119 @@
+terraform {
+  required_providers {
+    namecheap = {
+      source  = "namecheap/namecheap"
+      version = "2.0.0"
+    }
+  }
+}
+
+variable "ncapiname" {
+  type        = string
+  description = "The name of the API user."
+  default     = "{{ namecheap_user }}"
+
+  validation {
+    condition     = length(var.ncapiname) > 1
+    error_message = "API username cannot be null."
+  }
+}
+
+variable "ncapikey" {
+  type        = string
+  description = "The API key for the aforementioned user."
+  sensitive   = true
+  default     = "{{ namecheapapi_key }}"
+
+  validation {
+    condition     = length(var.ncapikey) > 1
+    error_message = "API key cannot be null."
+  }
+}
+
+variable "domain" {
+  type        = string
+  description = "The domain name."
+  default     = "{{ provided_domain }}"
+}
+
+data "http" "my_public_ip" {
+  url = "https://ifconfig.co/json"
+  request_headers = {
+    Accept = "application/json"
+  }
+}
+
+locals {
+  ifconfig_co_json = jsondecode(data.http.my_public_ip.body)
+}
+
+data "external" "jsonvalue" {
+  program = [
+    "fetchdkim",
+  ]
+}
+
+provider "namecheap" {
+  user_name   = var.ncapiname
+  api_user    = var.ncapiname
+  api_key     = var.ncapikey
+  client_ip   = local.ifconfig_co_json.ip
+  use_sandbox = false
+}
+
+resource "namecheap_domain_records" "domain-com" {
+  domain     = var.domain
+  mode       = "OVERWRITE"
+  email_type = "MX"
+  depends_on = [data.external.jsonvalue, data.http.my_public_ip]
+
+  record {
+    hostname = "@"
+    type     = "MX"
+    address  = var.domain
+    ttl      = 300
+  }
+
+  record {
+    hostname = "@"
+    type     = "A"
+    address  = local.ifconfig_co_json.ip
+    ttl      = 300
+  }
+
+  record {
+    hostname = "@"
+    type     = "TXT"
+    address  = "v=spf1 ip4:${local.ifconfig_co_json.ip} -all"
+    ttl      = 300
+  }
+
+  record {
+    hostname = "._dmarc"
+    type     = "TXT"
+    address  = "v=DMARC1; p=reject"
+    ttl      = 300
+  }
+
+  record {
+    hostname = "mail"
+    type     = "A"
+    address  = local.ifconfig_co_json.ip
+    ttl      = 300
+  }
+
+  record {
+    hostname = "www"
+    type     = "A"
+    address  = local.ifconfig_co_json.ip
+    ttl      = 300
+  }
+
+  record {
+    hostname = "dns"
+    type     = "A"
+    address  = local.ifconfig_co_json.ip
+    ttl      = 300
+  }
+
+}

@@ -1,0 +1,5 @@
+# Allow DSN requests from local subnet only
+192.168.0.0/16  silent-discard
+172.16.0.0/16   silent-discard
+0.0.0.0/0   silent-discard, dsn
+::/0        silent-discard, dsn
